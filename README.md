@@ -121,6 +121,7 @@ Option(s) | Description
 #### CLI Behavior:
 
 - The GUI will only start if no arguments are provided.
+- The `-v` option will show version information and check for updates.
 - The `-cli` option is required for CLI mode.
 - If `-ks` or `-ku` are used, both must be provided.
 - If neither `-ks` nor `-ku` are used, the script will prompt for credentials.
