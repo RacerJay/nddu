@@ -106,15 +106,17 @@ python nddu.py [options]
 
 #### Options:
 
-- `-h`, `--help`: Show the help message and exit
-- `-cli, --cli-defaults`: Run in CLI mode (required for CLI usage)
-- `-d, --device-file`: Path to the device list file (default: `./input/Devices.txt`)
-- `-c, --command-file`: Path to the command list file (default: `./input/Commands.txt`)
-- `-ks, --keyring-system`: Keyring system name for keyring credentials (requires `-ku`)
-- `-ku, --keyring-user`: Keyring user name for keyring credentials (requires `-ks`)
-- `--verbose`: Enable verbose output (default: `False`)
-- `--combined`: Enable creation of combined output file (default: `False`)
-- `-v, --version`: Show program's version number and exit
+Option(s) | Description
+----------|------------
+`-h`, `--help` | Show this help message and exit
+`-v`, `--version` | Show version information and check for updates
+`-cli`, `--cli-mode` | Run in CLI mode (required for CLI mode)
+`-d`, `--device-file` | Path to the device list file (default: ./input/Devices.txt)
+`-c`, `--command-file` | Path to the command list file (default: ./input/Commands.txt)
+`-ks`, `--keyring-system` | Keyring system name for keyring credentials (requires -ku)
+`-ku`, `--keyring-user` | Keyring user name for keyring credentials (requires -ks)
+`--verbose` | Enable verbose output
+`--combined` | Enable creation of combined output file
 
 #### CLI Behavior:
 
