@@ -104,7 +104,7 @@ Run the script with the following options:
 python nddu.py [options]
 ```
 
-#### Options:
+#### CLI Options:
 
 Option(s) | Description
 ----------|------------
