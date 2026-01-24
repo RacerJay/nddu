@@ -1,17 +1,19 @@
 # Network Device Documentation Utility
 
-![Logo](./images/nddu.png)
+![Logo](images/nddu.png)
 
-![Version](https://img.shields.io/badge/version-v1.0-green)
+<!-- ![GitHub Tag](https://img.shields.io/github/v/tag/RacerJay/nddu?color=green) -->
+<!-- ![GitHub Release](https://img.shields.io/github/v/release/RacerJay/nddu?color=green) -->
+![Version](https://img.shields.io/badge/Version-v1.0.1-green)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 
 ![Version](https://img.shields.io/badge/Python-3.8+-blue.svg)
 ![Version](https://img.shields.io/badge/PySide6-6.0+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/License-MIT-blue)
 
-<!-- ![nddu_screenshot](images/nddu_1.0.0_screenshot.png) -->
+<!-- ![nddu_screenshot](images/nddu_1.0.1_screenshot.png) -->
 <!-- ![keyring_toole_screenshot](images/keyring_tools_2.0_screenshot.png) -->
-<img src="images/nddu_1.0.0_screenshot.png" alt="nddu_screenshot" width="400" />
+<img src="images/nddu_1.0.1_screenshot.png" alt="nddu_screenshot" width="400" />
 <img src="images/keyring_tools_2.0_screenshot.png" alt="keyrin_tools_screenshot" width="300" />
 
 

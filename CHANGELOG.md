@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
+## ![Version](https://img.shields.io/badge/Version-v1.0.1-green) 08-27-2025
+  - `Fixed:` Hostnames were being truncated to 16 characters
 ## ![Version](https://img.shields.io/badge/Version-v1.0.0-green) 04-17-2025 - Initial Release
   - `Added:` Added comprehensive docstrings, added type hints throughout the code for improved organization and enhanced maintainability.
   - `Changed:` Keyring Tools v2.0-rc4 (04-06-2025)

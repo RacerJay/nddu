@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
           Script :: nddu.py
-         Version :: v1.0.0 (04-17-2025)
+         Version :: v1.0.1 (08-27-2025)
           Author :: jason.thomaschefsky@cdw.com
          Purpose :: Document network devices using "show" commands, processed with concurrent threads.
      Information :: See 'README.md'
@@ -58,8 +58,8 @@ logging.getLogger("netmiko").setLevel(logging.WARNING)   # Suppresses Netmiko ou
 
 # --- Application Metadata ---
 APP_NAME = "Network Device Documentation Utility"
-APP_VERSION = "v1.0.0"
-VERSION_DATE = "(04-17-2025)"
+APP_VERSION = "v1.0.1"
+VERSION_DATE = "(08-27-2025)"
 
 # --- Dark mode state ---
 DARK_MODE_STATE = True  # Start with dark mode enabled
@@ -335,7 +335,7 @@ class Worker(QThread):
                     username=self.credentials['username'],
                     password=self.credentials['password'],
                     secret=self.enable_password,
-                    banner_timeout=0,  # Set banner_timeout to 0 to skip banner
+                    banner_timeout=60,  # Set a timeout to wait for the SSH banner, 0 to skip banner
                     conn_timeout=5,  # Connection timeout (seconds)
                     read_timeout_override=5,  # Read timeout (seconds)
                     global_delay_factor=0.5  # Reduce delay factor for faster response
@@ -600,7 +600,7 @@ class Worker(QThread):
                 username=self.credentials['username'],
                 password=self.credentials['password'],
                 secret=self.enable_password,
-                banner_timeout=0,  # Set banner_timeout to 0 to skip banner
+                banner_timeout=60,  # Set a timeout to wait for the SSH banner, 0 to skip banner
                 conn_timeout=10,  # Connection timeout (seconds) - Default: 10
                 read_timeout_override=40,  # Read timeout (seconds) - Default: none
                 global_delay_factor=1  # Delay factor (seconds) - Default: 1
@@ -704,7 +704,14 @@ class Worker(QThread):
             Device hostname if found, None otherwise
         """
         try:
-            hostname = connection.base_prompt  # Directly use Netmiko's detected prompt
+            # Send command to get the full hostname from running configuration
+            output = connection.send_command('show running-config | include hostname')
+            if output:
+                hostname_line = output.strip()
+                if hostname_line.startswith('hostname'):
+                    hostname = hostname_line.split()[1]
+                    return hostname
+            hostname = connection.base_prompt  # Fallback: Directly use Netmiko's detected prompt
             return hostname.strip()
         except Exception as e:
             self.logger.warning(f"Failed to retrieve hostname: {e}")
