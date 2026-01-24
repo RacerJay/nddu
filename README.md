@@ -202,6 +202,7 @@ Contributions are welcome! For questions or issues, please open an issue or subm
 - [**Netmiko**](https://pypi.org/project/netmiko/): For network device connectivity.
 - [**Keyring**](https://pypi.org/project/keyring/): For secure credential storage.
 - [**Pyperclip**](https://pypi.org/project/pyperclip/): For clipboard functions.
+- [**Packaging**](https://pypi.org/project/packaging/): For version comparison.
 
 <!-- ![Kent_Brockman](images/Our_New_AI_Overlords.jpg) -->
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="images/Our_New_AI_Overlords.jpg" alt="Kent_Brockman" width="400" />
