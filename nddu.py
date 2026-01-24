@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 '''
           Script :: nddu.py
-         Version :: v1.0.1 (08-27-2025)
+         Version :: v1.1.0 (01-24-2026)
           Author :: jason.thomaschefsky@cdw.com
          Purpose :: Document network devices using "show" commands, processed with concurrent threads.
      Information :: See 'README.md'
 
 MIT License
 
-Copyright (c) 2025 Jason Thomaschefsky
+Copyright (c) 2026 Jason Thomaschefsky
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -40,17 +40,23 @@ import os
 import platform
 import subprocess
 import sys
+import json
+import urllib.request
+import urllib.error
+from packaging import version
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Set, Tuple, Union, Any, NoReturn
 from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
-from PySide6.QtCore import QObject, Qt, QThread, QRect, QSize, Signal
+from PySide6.QtCore import QObject, QTimer, Qt, QThread, QRect, QSize, Signal
 from PySide6.QtGui import QPalette, QPixmap, QPainter, QTextFormat, QColor, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QFrame, QWidget, QLabel, QPushButton, QLineEdit, QCheckBox, QVBoxLayout, QHBoxLayout,
     QFileDialog, QGroupBox, QMessageBox, QRadioButton, QProgressBar, QScrollArea, QDialog, QTextEdit,
     QPlainTextEdit
 )
+from urllib.error import URLError, HTTPError
+from typing import Optional, Dict
 
 # --- Silence Paramiko and Netmiko logs ---
 logging.getLogger("paramiko").setLevel(logging.WARNING)  # Suppresses SSH connection details
@@ -58,8 +64,10 @@ logging.getLogger("netmiko").setLevel(logging.WARNING)   # Suppresses Netmiko ou
 
 # --- Application Metadata ---
 APP_NAME = "Network Device Documentation Utility"
-APP_VERSION = "v1.0.1"
-VERSION_DATE = "(08-27-2025)"
+APP_VERSION = "v1.1.0"
+VERSION_DATE = "(01-24-2026)"
+GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/RacerJay/nddu/releases/latest"
+REPO_URL = "https://github.com/RacerJay/nddu"
 
 # --- Dark mode state ---
 DARK_MODE_STATE = True  # Start with dark mode enabled
@@ -487,7 +495,11 @@ class Worker(QThread):
             with open(device_file, 'r', encoding='utf-8') as file:
                 for line_number, line in enumerate(file, start=1):
                     line = line.strip()
-                    if not line or line.startswith("#"):  # Skip empty lines and comments
+                    if '#' in line:
+                        line = line.split('#', 1)[0]
+                    
+                    line = line.strip()
+                    if not line:  # Skip empty lines
                         continue
 
                     # Check for valid IP address
@@ -531,7 +543,11 @@ class Worker(QThread):
             with open(command_file, 'r', encoding='utf-8') as file:
                 for line_number, line in enumerate(file, start=1):
                     line = line.strip()
-                    if not line or line.startswith("#"):  # Skip empty lines and comments
+                    if '#' in line:
+                        line = line.split('#', 1)[0]
+                    
+                    line = line.strip()
+                    if not line:  # Skip empty lines
                         continue
 
                     # Check command length
@@ -1071,7 +1087,8 @@ class FileEditorDialog(QDialog):
 class HelpDialog(QDialog):
     """Custom dialog for displaying help information."""
     
-    def __init__(self, title: str, version: str, version_date: str, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, title: str, version: str, version_date: str, 
+                 parent: Optional[QWidget] = None) -> None:
         """
         Initialize the help dialog.
         
@@ -1088,7 +1105,13 @@ class HelpDialog(QDialog):
         self.dark_mode = parent.dark_mode if parent and hasattr(parent, 'dark_mode') else DARK_MODE_STATE
         
         # Set Help window size (width, height)
-        self.setFixedSize(620, 720)
+        self.setFixedSize(620, 800)
+
+        # Get repo URL and callback from parent if available
+        self.repo_url = REPO_URL
+        # self.check_update_callback = None
+        # if parent and hasattr(parent, 'check_for_updates'):
+        #     self.check_update_callback = parent.check_for_updates
         
         # Create main layout with margins
         layout = QVBoxLayout(self)
@@ -1097,7 +1120,21 @@ class HelpDialog(QDialog):
         # Add the title and version
         title_label = QLabel(f"<h1>{APP_NAME}</h1><h3>{APP_VERSION} {VERSION_DATE}</h3>")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Create a widget for repo link and update check button
+        repo_widget = QWidget()
+        repo_layout = QHBoxLayout(repo_widget)
+        repo_layout.setContentsMargins(0, 10, 0, 10)  # Add some top margin
+
+        # Repo link
+        repo_label = QLabel(f'<a href="{self.repo_url}" style="color: #4CAF50;">Visit Website</a>')
+        repo_label.setOpenExternalLinks(True)
+        repo_layout.addWidget(repo_label)
+        repo_layout.addStretch()
+
+        # Add title and repo widget
         layout.addWidget(title_label)
+        layout.addWidget(repo_widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Create scroll area (no frame)
         scroll_area = QScrollArea()
@@ -1132,14 +1169,15 @@ class HelpDialog(QDialog):
         $ python nddu.py -cli [options]
 
         Options:
-        -cli, --cli-mode       Run in CLI mode (required for CLI mode)
-        -d, --device-file      Path to the device list file (default: ./input/Devices.txt)
-        -c, --command-file     Path to the command list file (default: ./input/Commands.txt)
-        -ks, --keyring-system  Keyring system name for keyring credentials (requires -ku)
-        -ku, --keyring-user    Keyring user name for keyring credentials (requires -ks)
-        --verbose              Enable verbose output
-        --combined             Enable creation of combined output file
-        -v, --version          Show version information and exit
+        -h, --help\t\tShow this help message and exit
+        -v, --version\t\tShow version information and check for updates
+        -cli, --cli-mode\tRun in CLI mode (required for CLI mode)
+        -d, --device-file\tPath to the device list file (default: ./input/Devices.txt)
+        -c, --command-file\tPath to the command list file (default: ./input/Commands.txt)
+        -ks, --keyring-system\tKeyring system name for keyring credentials (requires -ku)
+        -ku, --keyring-user\tKeyring user name for keyring credentials (requires -ks)
+        --verbose\t\tEnable verbose output
+        --combined\t\tEnable creation of combined output file
 
         CLI Behavior:
         - The GUI will only start if no arguments are provided.
@@ -1148,8 +1186,9 @@ class HelpDialog(QDialog):
         - If -d and -c are used, they will be used as specified.
         - If -d is used without -c, -c will use the default Commands file.
         - If -c is used without -d, -c will use the default Devices file.
-        - If neither -d nor -c are used, both default input files will be used.
+        - If neither -d nor -c are used, both default files will be used.
         """
+
         help_label = QLabel(help_text)
         help_label.setWordWrap(True)
         help_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -1159,10 +1198,25 @@ class HelpDialog(QDialog):
         scroll_area.setWidget(container)
         layout.addWidget(scroll_area)
 
-        # Add close button
+        # Create a widget for the Close button (centered)
+        close_widget = QWidget()
+        close_layout = QHBoxLayout(close_widget)
+        close_layout.setContentsMargins(0, 10, 0, 10)
+        
+        # Add stretch to center the button
+        close_layout.addStretch()
+        
+        # Add Close button
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.close)
-        layout.addWidget(close_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        close_button.setMinimumWidth(100)
+        close_layout.addWidget(close_button)
+        
+        # Add stretch to center the button
+        close_layout.addStretch()
+        
+        # Add close widget to main layout
+        layout.addWidget(close_widget)
 
         # Apply theme
         self.apply_theme()
@@ -1206,11 +1260,58 @@ class HelpDialog(QDialog):
                 QPushButton:hover {
                     background-color: #454545;
                 }
+                QPushButton:disabled {
+                    background-color: #555;
+                    color: #999;
+                }
             """)
         else:
             # Reset to default light theme
             self.setPalette(QApplication.style().standardPalette())
-            self.setStyleSheet("")
+            self.setStyleSheet("""
+                QPushButton:disabled {
+                    background-color: #e0e0e0;
+                    color: #999;
+                }
+            """)
+
+class VersionChecker(QObject):
+    """Check for updates using GitHub Releases API."""
+    update_found = Signal(str, str)  # (new_version, release_url)
+    check_complete = Signal(bool)  # Whether check was successful
+    
+    def check(self) -> None:
+        """Check for updates in a non-blocking way."""
+        try:
+            # Create request with headers (GitHub API likes User-Agent)
+            headers = {
+                'User-Agent': f'{APP_NAME}/{APP_VERSION}',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+            req = urllib.request.Request(GITHUB_API_LATEST_RELEASE, headers=headers)
+            
+            with urllib.request.urlopen(req, timeout=3) as response:
+                data = json.loads(response.read().decode())
+                latest_tag = data.get('tag_name', '')  # e.g., "v1.1.0"
+                current_version = APP_VERSION  # e.g., "v1.0.0"
+                
+                # Remove 'v' prefix for comparison
+                latest_version_str = latest_tag.lstrip('v')
+                current_version_str = current_version.lstrip('v')
+                
+                # Compare versions
+                latest_ver = version.parse(latest_version_str)
+                current_ver = version.parse(current_version_str)
+                
+                if latest_ver > current_ver:
+                    release_url = data.get('html_url', REPO_URL)
+                    self.update_found.emit(latest_version_str, release_url)
+                
+                self.check_complete.emit(True)
+                
+        except Exception:
+            # Silently fail - don't interrupt user
+            self.check_complete.emit(False)
 
 class MyWindow(QWidget):
     """Main application window for the Network Device Documentation Utility."""
@@ -1223,8 +1324,14 @@ class MyWindow(QWidget):
         self.verbose_was_enabled = False
         self.combined_output_was_enabled = False
         self.stop_requested = False
+        self.update_available = False
+        self.new_version = ""
+        self.release_url = ""
         self.toggle_theme(self.dark_mode)  # Toggle theme according to DARK_MODE_STATE
         self.init_ui()
+
+        # Start update check after UI is shown
+        QTimer.singleShot(1000, self.check_for_updates)
 
     def configure_logging(self, log_file: str) -> None:
         """
@@ -1349,10 +1456,31 @@ class MyWindow(QWidget):
         logo_title_layout.addWidget(self.logo)
         logo_title_layout.addSpacing(20)
 
+        # Create a container widget with fixed height
+        title_container = QWidget()
+        title_container.setFixedHeight(60)  # Enough for title + update indicator
+        title_layout = QVBoxLayout(title_container)
+        title_layout.setContentsMargins(0, 0, 0, 0)  # No margins
+        title_layout.setSpacing(2)
+
         # Add the script name and version
-        title_label = QLabel(f"<span style='font-size: 18px; font-weight: bold;'>{APP_NAME}</span><br>"
-                        f"<span style='font-size: 12px;'>{APP_VERSION}</span>", self)
-        logo_title_layout.addWidget(title_label)
+        self.title_label = QLabel(
+            f"<span style='font-size: 18px; font-weight: bold;'>{APP_NAME}</span><br>"
+            f"<span style='font-size: 12px;'>{APP_VERSION}</span>", 
+            self
+        )
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        title_layout.addWidget(self.title_label)
+
+        # Add update indicator (initially empty)
+        self.update_indicator = QLabel("", self)
+        self.update_indicator.setStyleSheet("color: #4CAF50; font-size: 11px;")
+        self.update_indicator.setOpenExternalLinks(True)
+        self.update_indicator.setCursor(Qt.PointingHandCursor)
+        title_layout.addWidget(self.update_indicator)
+
+        # Now add the container to the logo_title_layout
+        logo_title_layout.addWidget(title_container)
         logo_title_layout.addStretch()
 
         # Create the Input Files section
@@ -1594,6 +1722,42 @@ class MyWindow(QWidget):
         options_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins for the Options layout
         actions_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins for the Actions layout
         output_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins for the Output layout
+
+    def check_for_updates(self) -> None:
+        """Start background update check."""
+        self.version_checker = VersionChecker()
+        self.version_checker.update_found.connect(self.on_update_found)
+        self.version_checker.check_complete.connect(self.on_check_complete)
+        
+        # Run in a thread to avoid blocking UI
+        self.check_thread = QThread()
+        self.version_checker.moveToThread(self.check_thread)
+        self.check_thread.started.connect(self.version_checker.check)
+        self.check_thread.start()
+
+    def on_update_found(self, new_version: str, release_url: str) -> None:
+        """Handle when an update is found."""
+        self.update_available = True
+        self.new_version = new_version
+        self.release_url = release_url
+        
+        # Show update indicator
+        update_text = f'<a href="{release_url}" style="color: #4CAF50; text-decoration: none;">'
+        update_text += f'Update available: v{new_version} ↗</a>'
+        self.update_indicator.setText(update_text)
+        
+        # Also log to output
+        # self.append_colored_message(f"Update available: v{new_version} (current: v{APP_VERSION.lstrip('v')})", "INFO")
+
+    def on_check_complete(self, success: bool) -> None:
+        """Clean up after update check."""
+        if hasattr(self, 'check_thread'):
+            self.check_thread.quit()
+            self.check_thread.wait()
+            
+        if not success and not self.update_available:
+            # Check failed but that's OK - we don't show errors
+            pass
 
     def keep_horizontal_scroll_left(self) -> None:
         """Ensure the horizontal scrollbar stays on the left side when new text is added."""
@@ -2164,6 +2328,39 @@ class MyWindow(QWidget):
         self.enable_input_controls()  # Re-enable all input controls
         self.update_go_button_style(is_stop=False)
         
+def check_cli_updates() -> Optional[Dict[str, str]]:
+    """Check for updates in CLI mode using GitHub API."""
+    try:
+        headers = {
+            'User-Agent': f'{APP_NAME}/{APP_VERSION}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        req = urllib.request.Request(GITHUB_API_LATEST_RELEASE, headers=headers)
+        
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode())
+            latest_tag = data.get('tag_name', '')  # e.g., "v1.1.0"
+            current_version = APP_VERSION  # e.g., "v1.0.0"
+            
+            # Remove 'v' prefix for comparison
+            latest_version_str = latest_tag.lstrip('v')
+            current_version_str = current_version.lstrip('v')
+            
+            # Compare versions
+            latest_ver = version.parse(latest_version_str)
+            current_ver = version.parse(current_version_str)
+            
+            if latest_ver > current_ver:
+                return {
+                    'latest_version': latest_version_str,
+                    'release_url': data.get('html_url', REPO_URL),
+                    'download_url': data.get('zipball_url', ''),
+                    'body': data.get('body', '')  # Release notes
+                }
+    except Exception:
+        pass  # Silently fail
+    return None
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command line arguments.
@@ -2171,26 +2368,132 @@ def parse_args() -> argparse.Namespace:
     Returns:
         Namespace with parsed arguments
     """
-    parser = argparse.ArgumentParser(description=f"Network Device Documentation Utility")
-    parser.add_argument("-cli", "--cli-mode", action="store_true", help=f"Run in CLI mode (required for CLI mode)")
-    parser.add_argument("-d", "--device-file", type=str, help=f"Path to the device list file (default: %(default)s)", default=str(DEFAULT_DEVICE_FILE))
-    parser.add_argument("-c", "--command-file", type=str, help=f"Path to the command list file (default: %(default)s)", default=str(DEFAULT_COMMAND_FILE))
-    parser.add_argument("-ks", "--keyring-system", type=str, help=f"Keyring system name for keyring credentials (requires -ku)")
-    parser.add_argument("-ku", "--keyring-user", type=str, help=f"Keyring user name for keyring credentials (requires -ks)")
-    parser.add_argument("--verbose", action="store_true", help=f"Enable verbose output (default: %(default)s)", default=False)
-    parser.add_argument("--combined", action="store_true", help=f"Enable creation of combined output file (default: %(default)s)", default=False)
-    parser.add_argument("-v", "--version", action="version", version=f"nddu {APP_VERSION} {VERSION_DATE}")
+    # Custom formatter to show our version format
+    class CustomHelpFormatter(argparse.HelpFormatter):
+        def add_usage(self, usage, actions, groups, prefix=None):
+            if prefix is None:
+                prefix = 'Usage: '
+            return super().add_usage(usage, actions, groups, prefix)
+    
+    parser = argparse.ArgumentParser(
+        description=f"Network Device Documentation Utility",
+        formatter_class=CustomHelpFormatter,
+        add_help=False  # We'll add help manually to control order
+    )
+    
+    # Add arguments in logical order
+    parser.add_argument("-h", "--help", action="store_true",
+                       help=f"Show this help message and exit")
+    parser.add_argument("-v", "--version", action="store_true",
+                       help=f"Show version information and check for updates")
+    parser.add_argument("-cli", "--cli-mode", action="store_true", 
+                       help=f"Run in CLI mode (required for CLI mode)")
+    parser.add_argument("-d", "--device-file", type=str, 
+                       help=f"Path to the device list file (default: %(default)s)", 
+                       default=str(DEFAULT_DEVICE_FILE))
+    parser.add_argument("-c", "--command-file", type=str, 
+                       help=f"Path to the command list file (default: %(default)s)", 
+                       default=str(DEFAULT_COMMAND_FILE))
+    parser.add_argument("-ks", "--keyring-system", type=str, 
+                       help=f"Keyring system name for keyring credentials (requires -ku)")
+    parser.add_argument("-ku", "--keyring-user", type=str, 
+                       help=f"Keyring user name for keyring credentials (requires -ks)")
+    parser.add_argument("--verbose", action="store_true", 
+                       help=f"Enable verbose output (default: %(default)s)", default=False)
+    parser.add_argument("--combined", action="store_true", 
+                       help=f"Enable creation of combined output file (default: %(default)s)", 
+                       default=False)
+    
     return parser.parse_args()
 
 def run_cli() -> None:
     """Run the script in command line interface mode."""
     args = parse_args()
+    
+    # Handle help first
+    if args.help:
+        print(f"nddu - Network Device Documentation Utility")
+        print(f"Version: {APP_VERSION} {VERSION_DATE}")
+        print()
+        print(f"Usage: python nddu.py [options]")
+        print()
+        print(f"Options:")
+        print(f"  -h, --help            Show this help message and exit")
+        print(f"  -v, --version         Show version information and check for updates")
+        print(f"  -cli, --cli-mode      Run in CLI mode (required for CLI mode)")
+        print(f"  -d, --device-file     Path to the device list file (default: ./input/Devices.txt)")
+        print(f"  -c, --command-file    Path to the command list file (default: ./input/Commands.txt)")
+        print(f"  -ks, --keyring-system Keyring system name for keyring credentials (requires -ku)")
+        print(f"  -ku, --keyring-user   Keyring user name for keyring credentials (requires -ks)")
+        print(f"  --verbose             Enable verbose output")
+        print(f"  --combined            Enable creation of combined output file")
+        print()
+        print(f"Examples:")
+        print(f"  python nddu.py                    # Launch GUI")
+        print(f"  python nddu.py -cli -v            # Show version and check updates")
+        print(f"  python nddu.py -cli -d devices.txt -c commands.txt")
+        print()
+        
+        # Check for updates silently when showing help
+        update_info = check_cli_updates()
+        if update_info:
+            current = APP_VERSION.lstrip('v')
+            latest = update_info.get('latest_version', '').lstrip('v')
+            print(f"Note: Update available! v{latest} (current: v{current})")
+            print(f"      Run with -v to see update details.")
+        
+        sys.exit(0)
+    
+    # Handle version/update check
+    if args.version:
+        print(f"nddu {APP_VERSION} {VERSION_DATE}")
+        
+        update_info = check_cli_updates()
+        if update_info:
+            current = APP_VERSION.lstrip('v')
+            latest = update_info.get('latest_version', '').lstrip('v')
+            release_url = update_info.get('release_url', REPO_URL)
+            
+            print(f"\n{DIVIDER}")
+            print(f"Update available!")
+            print(f"Current version: v{current}")
+            print(f"Latest version:  v{latest}")
+            print(f"Release URL: {release_url}")
+            
+            # Show release notes
+            release_notes = update_info.get('body', '').strip()
+            if release_notes:
+                print(f"\nRelease notes:")
+                lines = release_notes.split('\n')
+                for line in lines[:5]:  # Show first 5 lines
+                    if line.strip():
+                        print(f"  {line[:120]}{'...' if len(line) > 120 else ''}")
+                if len(lines) > 5:
+                    print(f"  ... (see full release notes at {release_url})")
 
-    # If -cli is not specified, exit with an error
+            print(f"{DIVIDER}\n")
+        else:
+            print(f"No updates found.")
+        
+        sys.exit(0)
+    
+    # If we get here, it's a normal CLI run
+    # Show update notification at start of normal run
+    update_info = check_cli_updates()
+    if update_info:
+        current = APP_VERSION.lstrip('v')
+        latest = update_info.get('latest_version', '').lstrip('v')
+        print(f"{DIVIDER}")
+        print(f"[UPDATE] New version available: v{latest} (current: v{current})")
+        print(f"[UPDATE] Release: {update_info.get('release_url', REPO_URL)}")
+        print(f"{DIVIDER}")
+    
+    # Validate CLI mode flag
     if not args.cli_mode:
-        print("ERROR: CLI mode requires the -cli argument.")
+        print(f"ERROR: CLI mode requires the -cli argument.")
+        print(f"Use -h for help.")
         sys.exit(1)
-
+    
     # Validate -ks and -ku: they must be used together
     if (args.keyring_system and not args.keyring_user) or (args.keyring_user and not args.keyring_system):
         print("ERROR: -ks and -ku must be used together.")
@@ -2288,13 +2591,20 @@ def run_cli() -> None:
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    args = parse_args()
-
+    # Quick check for version/help flags (don't parse fully yet)
     if len(sys.argv) == 1:
-        # No arguments provided, start the GUI
+        # No arguments, launch GUI
         app = QApplication(sys.argv)
         window = MyWindow()
         window.show()
         sys.exit(app.exec())
+    elif '-h' in sys.argv or '--help' in sys.argv:
+        # Show help immediately
+        run_cli()  # This will exit after showing help
+    elif '-v' in sys.argv or '--version' in sys.argv:
+        # Show version immediately
+        run_cli()  # This will exit after showing version
     else:
+        # Parse all args for normal execution
+        args = parse_args()
         run_cli()
