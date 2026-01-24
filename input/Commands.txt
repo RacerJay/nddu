@@ -1,0 +1,11 @@
+# Commented lines beginning with # will be ignored
+show running-config
+#more system:running-config
+show vlan brief
+show interface status
+show interface description
+show ip arp
+show mac add
+show version
+dir
+show logg

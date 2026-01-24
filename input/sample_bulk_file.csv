@@ -1,0 +1,6 @@
+function,system,username,password
+get,example_system,user1,
+del,example_system,user1,
+set,example_system,user1,password123
+get,example_system,user1,
+del,example_system,user1,
