@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
           Script :: nddu.py
-         Version :: v1.1.0 (01-24-2026)
+         Version :: v1.1.0 (01-30-2026) - beta.4
           Author :: jason.thomaschefsky@cdw.com
          Purpose :: Document network devices using "show" commands, processed with concurrent threads.
      Information :: See 'README.md'
@@ -43,11 +43,13 @@ import sys
 import json
 import urllib.request
 import urllib.error
+import time
 from packaging import version
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Set, Tuple, Union, Any, NoReturn
 from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
+from netmiko.ssh_autodetect import SSHDetect
 from PySide6.QtCore import QObject, QTimer, Qt, QThread, QRect, QSize, Signal
 from PySide6.QtGui import QPalette, QPixmap, QPainter, QTextFormat, QColor, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
@@ -65,13 +67,12 @@ logging.getLogger("netmiko").setLevel(logging.WARNING)   # Suppresses Netmiko ou
 # --- Application Metadata ---
 APP_NAME = "Network Device Documentation Utility"
 APP_VERSION = "v1.1.0"
-VERSION_DATE = "(01-24-2026)"
+VERSION_DATE = "(01-30-2026)"
 GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/RacerJay/nddu/releases/latest"
 REPO_URL = "https://github.com/RacerJay/nddu"
 
 # --- Dark mode state ---
 DARK_MODE_STATE = True  # Start with dark mode enabled
-# DARK_MODE_STATE = False  # Start with dark mode disabled
 
 # --- File Paths (all as Path objects) ---
 SCRIPT_DIR = Path(__file__).parent
@@ -95,6 +96,25 @@ ALLOWED_COMMAND_PREFIXES = {"dir", "mor", "sho", "who"}
 # --- Concurrency ---
 # Calculate the maximum number of threads to execute concurrently
 max_workers = min(32, os.cpu_count() + 8)  # Changed from default of + 4
+
+# Netmiko device type auto-detection configuration
+ENABLE_AUTO_DETECT = False  # Set to False to disable auto-detection
+AUTO_DETECT_TIMEOUT = 3  # Seconds to wait for auto-detection
+
+# Vendors / platforms commonly used with Netmiko
+ALLOWED_TYPES = {
+    # Cisco families
+    "cisco_ios",
+    "cisco_xe",
+    "cisco_xr",
+    "cisco_nxos",
+    "cisco_asa",
+    "cisco_wlc",
+    # Others you might add later
+    "arista_eos",
+    "juniper_junos",
+    "huawei",
+}
 
 # --- Add supports for VERBOSE logging level 15 ---
 VERBOSE_LEVEL_NUM = 15  # Between INFO(20) and DEBUG(10)
@@ -120,6 +140,64 @@ def format_time(dt: Optional[datetime] = None) -> str:
     if dt is None:
         dt = datetime.now()
     return dt.strftime('%a %m/%d/%Y - %I:%M:%S %p')
+
+def detect_device_type(host: str, username: str, password: str, enable_password: Optional[str] = None) -> Optional[str]:
+    start_time = time.time()
+    
+    if time.time() - start_time < AUTO_DETECT_TIMEOUT:
+        logging.getLogger(__name__).info(f"Detecting device type on device (~15s): {host}")
+        try:
+            detector = SSHDetect(
+                device_type='autodetect',
+                host=host,
+                username=username,
+                password=password,
+                secret=enable_password,
+                conn_timeout=3,
+                banner_timeout=3,
+                read_timeout_override=3,
+                global_delay_factor=0.25
+            )
+
+            best_match = detector.autodetect()
+            if best_match:
+                elapsed = time.time() - start_time
+                logging.getLogger(__name__).verbose(f"Device {host} was detected as type '{best_match}' in {elapsed:.2f}s")
+                logging.getLogger(__name__).verbose(f"Potential matches: {detector.potential_matches}")  # See all candidates
+                return best_match
+            elif not best_match:
+                raise ValueError(f"Could not auto-detect device type for {host}")
+            if best_match not in ALLOWED_TYPES:
+                raise ValueError(f"Auto-detected unsupported type '{best_match}' for {host}")
+
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Device auto-detection failed for {host}: {e}")
+
+    return None
+
+def get_device_type(host: str, username: str, password: str, 
+                   enable_password: Optional[str] = None, enable_auto_detect: bool = False) -> str:
+    """
+    Get device type with fallback logic.
+    
+    Args:
+        host: Device hostname or IP
+        username: SSH username
+        password: SSH password
+        enable_password: Enable password (optional)
+        enable_auto_detect: Whether to enable auto-detection
+    """
+    if not enable_auto_detect:
+        return 'cisco_ios'
+    
+    detected_type = detect_device_type(host, username, password, enable_password)
+    
+    if detected_type:
+        return detected_type
+    
+    # Fallback based on common patterns or previous experience
+    logging.getLogger(__name__).verbose(f"Auto-detection failed for {host}, using cisco_ios as fallback")
+    return 'cisco_ios'
 
 class AllowedCommands:
     """Class to validate and manage allowed command prefixes."""
@@ -287,7 +365,7 @@ class Worker(QThread):
 
     def __init__(self, device_file: str, command_file: str, credentials: Dict[str, str], 
                  enable_password: str, output_folder: Path, verbose_enabled: bool, 
-                 create_combined_output: bool = False) -> None:
+                 create_combined_output: bool = False, enable_auto_detect: bool = False) -> None:
         """
         Initialize the worker thread.
         
@@ -299,6 +377,7 @@ class Worker(QThread):
             output_folder: Directory for output files
             verbose_enabled: Whether verbose logging is enabled
             create_combined_output: Whether to create combined output file
+            enable_auto_detect: Whether to enable device type auto-detection
         """
         super().__init__()
         self.device_file = device_file
@@ -308,6 +387,7 @@ class Worker(QThread):
         self.output_folder = output_folder
         self.verbose_enabled = verbose_enabled
         self.create_combined_output = create_combined_output
+        self.enable_auto_detect = enable_auto_detect
         self._is_cancelled = False  # Cancellation flag
         self.active_connections: List[Any] = []  # Track active connections
 
@@ -346,7 +426,8 @@ class Worker(QThread):
                     banner_timeout=60,  # Set a timeout to wait for the SSH banner, 0 to skip banner
                     conn_timeout=5,  # Connection timeout (seconds)
                     read_timeout_override=5,  # Read timeout (seconds)
-                    global_delay_factor=0.5  # Reduce delay factor for faster response
+                    global_delay_factor=0.5,  # Reduce delay factor for faster response
+                    fast_cli=True
                 )
                 connection.enable()
                 connection.disconnect()
@@ -432,6 +513,7 @@ class Worker(QThread):
                 self.logger.verbose(f"Credentials - Enable Password: {self.enable_password}")
                 self.logger.verbose(f'Input File - Devices: "{self.device_file}"')
                 self.logger.verbose(f'Input File - Commands: "{self.command_file}"')
+                self.logger.verbose(f"Device Type Auto-detection: {self.enable_auto_detect}")
                 self.logger.verbose(f"CPU Count: {os.cpu_count()}, max_workers: {max_workers}")
 
             with concurrent.futures.ThreadPoolExecutor(max_workers) as executor:
@@ -610,8 +692,18 @@ class Worker(QThread):
             return device, False, 0
 
         try:
+            # Get device type with auto-detection
+            auto_device_type = get_device_type(
+                device,
+                self.credentials['username'],
+                self.credentials['password'],
+                self.enable_password,
+                self.enable_auto_detect
+            )
+
+            self.logger.verbose(f"Processing {device} as type '{auto_device_type}'")
             connection = ConnectHandler(
-                device_type='cisco_ios',
+                device_type=auto_device_type,
                 host=device,
                 username=self.credentials['username'],
                 password=self.credentials['password'],
@@ -619,7 +711,8 @@ class Worker(QThread):
                 banner_timeout=60,  # Set a timeout to wait for the SSH banner, 0 to skip banner
                 conn_timeout=10,  # Connection timeout (seconds) - Default: 10
                 read_timeout_override=40,  # Read timeout (seconds) - Default: none
-                global_delay_factor=1  # Delay factor (seconds) - Default: 1
+                global_delay_factor=1,  # Delay factor (seconds) - Default: 1
+                fast_cli=True
             )
             connection.enable()
             self.active_connections.append(connection)  # Track connection
@@ -1105,7 +1198,7 @@ class HelpDialog(QDialog):
         self.dark_mode = parent.dark_mode if parent and hasattr(parent, 'dark_mode') else DARK_MODE_STATE
         
         # Set Help window size (width, height)
-        self.setFixedSize(620, 800)
+        self.setFixedSize(620, 820)
 
         # Get repo URL and callback from parent if available
         self.repo_url = REPO_URL
@@ -1176,6 +1269,7 @@ class HelpDialog(QDialog):
         -c, --command-file\tPath to the command list file (default: ./input/Commands.txt)
         -ks, --keyring-system\tKeyring system name for keyring credentials (requires -ku)
         -ku, --keyring-user\tKeyring user name for keyring credentials (requires -ks)
+        -a, --autodetect\tEnable device type auto-detection (default: False)
         --verbose\t\tEnable verbose output
         --combined\t\tEnable creation of combined output file
 
@@ -1323,6 +1417,7 @@ class MyWindow(QWidget):
         self.enable_was_enabled = False
         self.verbose_was_enabled = False
         self.combined_output_was_enabled = False
+        self.autodetect_was_enabled = False  # Track autodetect state
         self.stop_requested = False
         self.update_available = False
         self.new_version = ""
@@ -1621,21 +1716,40 @@ class MyWindow(QWidget):
 
         # Add the Script Options section
         options_group = QGroupBox("Script Options")
-        options_layout = QHBoxLayout()
-        options_layout.setSpacing(40)   # Add some spacing between checkboxes
+        options_layout = QVBoxLayout()
+        options_layout.setSpacing(5)
 
+        # First row of checkboxes
+        first_row_layout = QHBoxLayout()
+        first_row_layout.setSpacing(40)
+        
         # Verbose Output checkbox
         self.verbose_checkbox = QCheckBox("Verbose Output", self)
         self.verbose_checkbox.setChecked(False)
-        options_layout.addWidget(self.verbose_checkbox)
+        first_row_layout.addWidget(self.verbose_checkbox)
 
+        # Device Type Auto-detection checkbox
+        self.autodetect_checkbox = QCheckBox("Device Type Auto-detection", self)
+        self.autodetect_checkbox.setChecked(False)  # Default to False
+        first_row_layout.addWidget(self.autodetect_checkbox)
+
+        # Add stretch to push checkboxes to the left
+        first_row_layout.addStretch()
+        options_layout.addLayout(first_row_layout)
+
+        # Second row of checkboxes
+        second_row_layout = QHBoxLayout()
+        second_row_layout.setSpacing(40)
+        
         # Combined Output File checkbox
         self.combined_output_checkbox = QCheckBox("Combined Output File", self)
         self.combined_output_checkbox.setChecked(False)
-        options_layout.addWidget(self.combined_output_checkbox)
-
+        second_row_layout.addWidget(self.combined_output_checkbox)
+        
         # Add stretch to push checkboxes to the left
-        options_layout.addStretch()
+        second_row_layout.addStretch()
+        options_layout.addLayout(second_row_layout)
+        
         options_group.setLayout(options_layout)
 
         # Actions section
@@ -1906,8 +2020,10 @@ class MyWindow(QWidget):
         # Store and disable Options checkboxes
         self.verbose_was_enabled = self.verbose_checkbox.isEnabled()
         self.combined_output_was_enabled = self.combined_output_checkbox.isEnabled()
+        self.autodetect_was_enabled = self.autodetect_checkbox.isEnabled()
         self.verbose_checkbox.setEnabled(False)
         self.combined_output_checkbox.setEnabled(False)
+        self.autodetect_checkbox.setEnabled(False)
         
         self.keyring_system_input.setEnabled(False)
         self.keyring_user_input.setEnabled(False)
@@ -1936,6 +2052,8 @@ class MyWindow(QWidget):
             self.verbose_checkbox.setEnabled(True)
         if self.combined_output_was_enabled:
             self.combined_output_checkbox.setEnabled(True)
+        if self.autodetect_was_enabled:
+            self.autodetect_checkbox.setEnabled(True)
         
         self.keyring_system_input.setEnabled(True)
         self.keyring_user_input.setEnabled(True)
@@ -2142,7 +2260,8 @@ class MyWindow(QWidget):
             enable_password=enable_password,
             output_folder=output_folder,
             verbose_enabled=self.verbose_checkbox.isChecked(),
-            create_combined_output=self.combined_output_checkbox.isChecked()
+            create_combined_output=self.combined_output_checkbox.isChecked(),
+            enable_auto_detect=self.autodetect_checkbox.isChecked()
         )
         self.worker.progress_signal.connect(self.update_progress)
         self.worker.log_signal.connect(self.update_log)
@@ -2398,6 +2517,8 @@ def parse_args() -> argparse.Namespace:
                        help=f"Keyring system name for keyring credentials (requires -ku)")
     parser.add_argument("-ku", "--keyring-user", type=str, 
                        help=f"Keyring user name for keyring credentials (requires -ks)")
+    parser.add_argument("-a", "--autodetect", action="store_true",
+                       help=f"Enable device type auto-detection (default: %(default)s)", default=False)
     parser.add_argument("--verbose", action="store_true", 
                        help=f"Enable verbose output (default: %(default)s)", default=False)
     parser.add_argument("--combined", action="store_true", 
@@ -2425,6 +2546,7 @@ def run_cli() -> None:
         print(f"  -c, --command-file    Path to the command list file (default: ./input/Commands.txt)")
         print(f"  -ks, --keyring-system Keyring system name for keyring credentials (requires -ku)")
         print(f"  -ku, --keyring-user   Keyring user name for keyring credentials (requires -ks)")
+        print(f"  -a, --autodetect      Enable device type auto-detection")
         print(f"  --verbose             Enable verbose output")
         print(f"  --combined            Enable creation of combined output file")
         print()
@@ -2586,7 +2708,16 @@ def run_cli() -> None:
         logger.verbose(f"Using manual credentials.")
 
     # Run the worker
-    worker = Worker(device_file, command_file, credentials, enable_password, output_folder, args.verbose, args.combined)
+    worker = Worker(
+        device_file, 
+        command_file, 
+        credentials, 
+        enable_password, 
+        output_folder, 
+        args.verbose, 
+        args.combined,
+        args.autodetect
+    )
     worker.run()
 
 # --- Main Execution ---
@@ -2594,6 +2725,7 @@ if __name__ == "__main__":
     # Quick check for version/help flags (don't parse fully yet)
     if len(sys.argv) == 1:
         # No arguments, launch GUI
+
         app = QApplication(sys.argv)
         window = MyWindow()
         window.show()

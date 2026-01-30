@@ -4,7 +4,7 @@
 
 <!-- ![GitHub Tag](https://img.shields.io/github/v/tag/RacerJay/nddu?color=green) -->
 <!-- ![GitHub Release](https://img.shields.io/github/v/release/RacerJay/nddu?color=green) -->
-![Version](https://img.shields.io/badge/Version-v1.1.0_beta.1-gold)
+![Version](https://img.shields.io/badge/Version-v1.1.0_beta.4-gold)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 
 ![Version](https://img.shields.io/badge/Python-3.8+-blue.svg)
@@ -15,7 +15,6 @@
 <!-- ![keyring_toole_screenshot](images/keyring_tools_2.0_screenshot.png) -->
 <img src="images/nddu_1.1.0_screenshot.png" alt="nddu_screenshot" width="400" />
 <img src="images/keyring_tools_2.0_screenshot.png" alt="keyrin_tools_screenshot" width="300" />
-
 
 **nddu** (Network Device Documentation Utility) is a Python-based tool designed to automate the documentation of network devices using "show" commands. It processes a list of devices and commands concurrently, making it efficient for large-scale network environments.
 
@@ -41,6 +40,7 @@
   - `netmiko` (for device connectivity)
   - `keyring` (for secure credential storage)
   - `pyperclip` (for clipboard functions)
+  - `packaging` (for version checking)
 
 ### Steps
 
@@ -92,7 +92,7 @@
     - **Manual Credentials:** Enter the username and password manually.
     - **Keyring Credentials:** Use credentials stored in the system keyring.
 
-4. (optional) Select **Script Options** for _Verbose Output_ or _Combined Output File_.
+4. (optional) Select **Script Options** for _Verbose Output_, _Device Type Auto-detection_, or _Combined Output File_.
 
 5. Click **Go** to start the process.
 
@@ -115,6 +115,7 @@ Option(s) | Description
 `-c`, `--command-file` | Path to the command list file (default: ./input/Commands.txt)
 `-ks`, `--keyring-system` | Keyring system name for keyring credentials (requires -ku)
 `-ku`, `--keyring-user` | Keyring user name for keyring credentials (requires -ks)
+`-a`, `--autodetect`    | Enable device type auto-detection
 `--verbose` | Enable verbose output
 `--combined` | Enable creation of combined output file
 
@@ -178,6 +179,8 @@ nddu/
   - Privilege Level 15 (Enable Mode) is the minimum requirement for this script to function properly, as it is designed to execute commands that typically require full administrative access.
   - Multi-Factor Authentication (MFA) may limit the ability for the script to function.
     - It would be best to setup an automation service account for this script's execution that does not require MFA.
+  - The _Device Type Auto-detection_ script option may significantly slow down the time it takes to discover devices, up to 2 minutes longer per device running in parallel.
+    - The script defaults to the Netmiko device type of `cisco_ios`.
 
 ---
 

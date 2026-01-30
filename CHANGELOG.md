@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## ![Version](https://img.shields.io/badge/Version-v1.1.0_beta.1-gold) 01-24-2026 - beta.1
-  - `Proposed:` Documentation summary to Excel option.
-  - `Proposed:` Netmiko Cisco type autodetection (Cisco IOS, IOS-XE, IOS-XR, NX-OS, APIC).
+## ![Version](https://img.shields.io/badge/Version-v1.1.0_beta.4-gold) 01-30-2026 - beta.4
+  - `Proposed:` Documentation summary Excel option.
+  - `Added:` New Script Option for Netmiko device type auto-detection (Cisco IOS, IOS-XE, IOS-XR, NX-OS, ASA, WLC).
   - `Added:` "New version" notification prompts.
   - `Changed:` Input files now ignore everything after the first `#` sign found in a given line, it no longer has to be just the first character.
 ## ![Version](https://img.shields.io/badge/Version-v1.0.1-green) 08-27-2025
