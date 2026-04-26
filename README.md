@@ -4,27 +4,35 @@
 
 <!-- ![GitHub Tag](https://img.shields.io/github/v/tag/RacerJay/nddu?color=green) -->
 <!-- ![GitHub Release](https://img.shields.io/github/v/release/RacerJay/nddu?color=green) -->
-![Version](https://img.shields.io/badge/Version-v1.1.0_beta.4-gold)
+![Version](https://img.shields.io/badge/Version-v1.3.5-gold)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 
 ![Version](https://img.shields.io/badge/Python-3.8+-blue.svg)
 ![Version](https://img.shields.io/badge/PySide6-6.0+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
-<!-- ![nddu_screenshot](images/nddu_1.1.0_screenshot.png) -->
-<!-- ![keyring_toole_screenshot](images/keyring_tools_2.0_screenshot.png) -->
-<img src="images/nddu_1.1.0_screenshot.png" alt="nddu_screenshot" width="400" />
-<img src="images/keyring_tools_2.0_screenshot.png" alt="keyrin_tools_screenshot" width="300" />
+---
 
 **nddu** (Network Device Documentation Utility) is a Python-based tool designed to automate the documentation of network devices using "show" commands. It processes a list of devices and commands concurrently, making it efficient for large-scale network environments.
+
+---
+
+## Screenshots
+
+| Main Application | Settings | Keyring Tools |
+| :---: | :---: | :---: |
+| <img src="images/nddu_1.3.5_screenshot.png" alt="nddu_screenshot" width="350" /> | <img src="images/nddu_1.3.5_settings_screenshot.png" alt="nddu_settings_screenshot" width="350" /> | <img src="images/keyring_tools_2.0_screenshot.png" alt="keyring_tools_screenshot" width="300" /> |
 
 ---
 
 ## Features
 
 - **Concurrent Processing:** Uses multi-threading to execute commands on multiple devices simultaneously.
-- **Customizable Input:** Supports custom device lists and command lists.
-- **GUI and CLI Support:** Provides both a graphical user interface (GUI) and a command-line interface (CLI).
+- **Customizable Input:** Supports custom device lists and command lists with a built-in file editor.
+- **Excel Report:** Generates structured Excel workbooks with selectable report sections (Interfaces, Neighbors, VLANs, Routing, STP, MAC Addresses, MAC Summary, Templates).
+- **Device Diff:** Compare two prior runs for the same client and generate a color-coded Excel diff report highlighting added, removed, and changed entries across 10 sheets. Supports optional port map CSV for switch replacement scenarios.
+- **Client Manager:** Manage client output folders, view run history, open output files, and manage the device type cache.
+- **Device Type Cache:** Auto-detected device types are cached per client so subsequent runs skip the slow auto-detection step.
 - **Verbose Logging:** Includes a verbose mode for detailed debugging and logging.
 - **Cross-Platform:** Works on Windows, macOS, and Linux.
 
@@ -38,6 +46,8 @@
 - Required Python packages:
   - `PySide6` (for the GUI)
   - `netmiko` (for device connectivity)
+  - `ntc-templates` (for structured command parsing via TextFSM)
+  - `openpyxl` (for Excel report generation)
   - `keyring` (for secure credential storage)
   - `pyperclip` (for clipboard functions)
   - `packaging` (for version checking)
@@ -57,24 +67,15 @@
     pip install -r requirements.txt
     ```
 
-3. Run the script:
-    - **GUI Mode:**
+3. Run the application:
 
-      ```bash
-      python nddu.py
-      ```
-
-    - **CLI Mode:**
-
-      ```bash
-      python nddu.py --cli-mode
-      ```
+    ```bash
+    python nddu.py
+    ```
 
 ---
 
 ## Usage
-
-### GUI Mode
 
 1. Launch the application:
 
@@ -86,50 +87,32 @@
 
     - **Device(s):** A text file containing the IP addresses of the devices.
     - **Command(s):** A text file containing the commands to execute on each device.
+    - Use the **Edit** button next to each file to open the built-in file editor.
 
 3. Choose the credential option:
 
     - **Manual Credentials:** Enter the username and password manually.
     - **Keyring Credentials:** Use credentials stored in the system keyring.
 
-4. (optional) Select **Script Options** for _Verbose Output_, _Device Type Auto-detection_, or _Combined Output File_.
+4. (optional) Select **Script Options** for _Verbose Output_ or _Device Type Auto-detection_.
 
-5. Click **Go** to start the process.
+5. (optional) Check **Excel Report** to generate a structured Excel workbook:
 
-### CLI Mode
+    - Choose which report sections to include using the component checkboxes (Interfaces, Neighbors, VLANs, Routing, STP, MAC Addresses, MAC Summary, Templates).
+    - Use **Select All** / **Deselect All** for quick toggling. At least one component must be selected.
+    - Check **Force Re-detect** to ignore cached device types and re-detect all devices (useful when devices have been replaced or upgraded).
 
-Run the script with the following options:
+6. Click **Go** to start the process. The progress bar shows completion status and turns green on success, red on failure, or amber if cancelled.
 
-```bash
-python nddu.py [options]
-```
+### Client Manager
 
-#### CLI Options:
+Access via the **Manage Clients** button in the Actions row. Features include:
 
-Option(s) | Description
-----------|------------
-`-h`, `--help` | Show this help message and exit
-`-v`, `--version` | Show version information and check for updates
-`-cli`, `--cli-mode` | Run in CLI mode (required for CLI mode)
-`-d`, `--device-file` | Path to the device list file (default: ./input/Devices.txt)
-`-c`, `--command-file` | Path to the command list file (default: ./input/Commands.txt)
-`-ks`, `--keyring-system` | Keyring system name for keyring credentials (requires -ku)
-`-ku`, `--keyring-user` | Keyring user name for keyring credentials (requires -ks)
-`-a`, `--autodetect`    | Enable device type auto-detection
-`--verbose` | Enable verbose output
-`--combined` | Enable creation of combined output file
-
-#### CLI Behavior:
-
-- The GUI will only start if no arguments are provided.
-- The `-v` option will show version information and check for updates.
-- The `-cli` option is required for CLI mode.
-- If `-ks` or `-ku` are used, both must be provided.
-- If neither `-ks` nor `-ku` are used, the script will prompt for credentials.
-- If `-d` and `-c` are both used, they will be used as specified.
-- If `-d` is used without `-c`, the default command file (`./input/Commands.txt`) will be used.
-- If `-c` is used without `-d`, the default device file (`./input/Devices.txt`) will be used.
-- If neither `-d` nor `-c` are used, both default input files will be used.
+- Create, rename, archive, and delete client folders.
+- View run history as a collapsible tree with timestamps and output files.
+- Open output files and folders directly from the manager.
+- **Compare Runs:** Select two prior runs for the same client to generate a Device Diff report. Optionally provide a port map CSV file (see `input/sample_port_map.csv`) to map old interface names to new ones when a switch has been replaced.
+- **Device Type Cache:** View and manage cached device type entries per client.
 
 ---
 
@@ -141,7 +124,8 @@ nddu/
 ├── input/
 │   ├── Devices.txt             # Default device list
 │   ├── Commands.txt            # Default command list
-│   └── sample_bulk_file.csv    # Bulk change example file for Keyring
+│   ├── sample_bulk_file.csv    # Bulk change example file for Keyring
+│   └── sample_port_map.csv     # Port map example file for Device Diff
 ├── output/                     # Output folder for logs and results
 ├── CHANGELOG.md                # The application's documented changes
 ├── keyring_tools.py            # Keyring Tools script
@@ -179,14 +163,12 @@ nddu/
   - Privilege Level 15 (Enable Mode) is the minimum requirement for this script to function properly, as it is designed to execute commands that typically require full administrative access.
   - Multi-Factor Authentication (MFA) may limit the ability for the script to function.
     - It would be best to setup an automation service account for this script's execution that does not require MFA.
-  - The _Device Type Auto-detection_ script option may significantly slow down the time it takes to discover devices, up to 2 minutes longer per device running in parallel.
-    - The script defaults to the Netmiko device type of `cisco_ios`.
 
 ---
 
 ## Changelog
 
-All notable changes to this project will be documented the [CHANGELOG](CHANGELOG.md) file.
+All notable changes to this project will be documented in the [CHANGELOG](CHANGELOG.md) file.
 
 ---
 
@@ -206,6 +188,8 @@ Contributions are welcome! For questions or issues, please open an issue or subm
 
 - [**PySide6**](https://pypi.org/project/PySide6/): For the GUI framework.
 - [**Netmiko**](https://pypi.org/project/netmiko/): For network device connectivity.
+- [**NTC-Templates**](https://pypi.org/project/ntc-templates/): For structured command parsing (TextFSM).
+- [**openpyxl**](https://pypi.org/project/openpyxl/): For Excel report generation.
 - [**Keyring**](https://pypi.org/project/keyring/): For secure credential storage.
 - [**Pyperclip**](https://pypi.org/project/pyperclip/): For clipboard functions.
 - [**Packaging**](https://pypi.org/project/packaging/): For version comparison.

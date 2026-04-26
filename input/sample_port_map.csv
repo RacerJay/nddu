@@ -1,0 +1,39 @@
+# Port Map — maps old interface names (Run A) to new interface names (Run B)
+#
+# Use this when a switch was replaced and physical ports changed numbering.
+# For example, when a 24-port switch stack is replaced with a single 48-port
+# switch, the old Gi2/0/1-24 ports may now be Gi1/0/25-48 on the new switch.
+#
+# Format: old_interface,new_interface
+# Abbreviated names are accepted (e.g., Gi1/0/1 instead of GigabitEthernet1/0/1).
+# Lines starting with '#' are comments; blank lines are ignored.
+# The header row below is optional and will be skipped automatically.
+#
+# The port map is applied to ALL diff sheets that reference interfaces:
+# Interfaces, Neighbors, VLANs, MAC Addresses, and Templates.
+#
+old_interface,new_interface
+Gi2/0/1,Gi1/0/25
+Gi2/0/2,Gi1/0/26
+Gi2/0/3,Gi1/0/27
+Gi2/0/4,Gi1/0/28
+Gi2/0/5,Gi1/0/29
+Gi2/0/6,Gi1/0/30
+Gi2/0/7,Gi1/0/31
+Gi2/0/8,Gi1/0/32
+Gi2/0/9,Gi1/0/33
+Gi2/0/10,Gi1/0/34
+Gi2/0/11,Gi1/0/35
+Gi2/0/12,Gi1/0/36
+Gi2/0/13,Gi1/0/37
+Gi2/0/14,Gi1/0/38
+Gi2/0/15,Gi1/0/39
+Gi2/0/16,Gi1/0/40
+Gi2/0/17,Gi1/0/41
+Gi2/0/18,Gi1/0/42
+Gi2/0/19,Gi1/0/43
+Gi2/0/20,Gi1/0/44
+Gi2/0/21,Gi1/0/45
+Gi2/0/22,Gi1/0/46
+Gi2/0/23,Gi1/0/47
+Gi2/0/24,Gi1/0/48
