@@ -72,7 +72,7 @@ logging.getLogger("netmiko").setLevel(logging.WARNING)   # Suppresses Netmiko ou
 # --- Application Metadata ---
 APP_NAME = "Network Device Documentation Utility"
 APP_VERSION = "v1.3.5"
-VERSION_DATE = "(04-24-2026)"
+VERSION_DATE = "(04-26-2026)"
 GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/RacerJay/nddu/releases/latest"
 REPO_URL = "https://github.com/RacerJay/nddu"
 
