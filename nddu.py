@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
           Script :: nddu.py
-         Version :: v1.3.5 (04-26-2026)
+         Version :: v1.3.6 (04-26-2026)
           Author :: jason.thomaschefsky@cdw.com
          Purpose :: Document network devices using "show" commands, processed with concurrent threads.
      Information :: See 'README.md' and 'CHANGELOG.md'
@@ -55,7 +55,8 @@ from typing import Optional, Dict, List, Set, Tuple, Union, Any, NoReturn
 from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
 from netmiko.ssh_autodetect import SSHDetect
 from PySide6.QtCore import QObject, QSettings, QTimer, Qt, QThread, QRect, QSize, Signal
-from PySide6.QtGui import QPalette, QPixmap, QPainter, QTextFormat, QColor, QPixmap, QTextCursor
+from PySide6.QtGui import QPalette, QPixmap, QPainter, QTextFormat, QColor, QPixmap, QTextCursor, QDesktopServices
+from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QApplication, QFrame, QWidget, QLabel, QPushButton, QLineEdit, QCheckBox, QVBoxLayout, QHBoxLayout,
     QFileDialog, QGroupBox, QMessageBox, QRadioButton, QProgressBar, QScrollArea, QDialog, QTextEdit,
@@ -71,7 +72,7 @@ logging.getLogger("netmiko").setLevel(logging.WARNING)   # Suppresses Netmiko ou
 
 # --- Application Metadata ---
 APP_NAME = "Network Device Documentation Utility"
-APP_VERSION = "v1.3.5"
+APP_VERSION = "v1.3.6"
 VERSION_DATE = "(04-26-2026)"
 GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/RacerJay/nddu/releases/latest"
 REPO_URL = "https://github.com/RacerJay/nddu"
@@ -2287,12 +2288,9 @@ class HelpDialog(QDialog):
         # Set Help window size (width, height)
         self.setFixedSize(500, 640)
 
-        # Get repo URL and callback from parent if available
+        # Get repo URL
         self.repo_url = REPO_URL
-        # self.check_update_callback = None
-        # if parent and hasattr(parent, 'check_for_updates'):
-        #     self.check_update_callback = parent.check_for_updates
-        
+
         # Create main layout with margins
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)  # Window margins
@@ -2301,16 +2299,15 @@ class HelpDialog(QDialog):
         title_label = QLabel(f"<h1>{APP_NAME}</h1><h3>{APP_VERSION} {VERSION_DATE}</h3>")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Create a widget for repo link and update check button
+        # Create a widget for the repo link
         repo_widget = QWidget()
         repo_layout = QHBoxLayout(repo_widget)
-        repo_layout.setContentsMargins(0, 10, 0, 10)  # Add some top margin
+        repo_layout.setContentsMargins(0, 10, 0, 10)
 
         # Repo link
         repo_label = QLabel(f'<a href="{self.repo_url}" style="color: #4CAF50;">Visit Website</a>')
         repo_label.setOpenExternalLinks(True)
         repo_layout.addWidget(repo_label)
-        repo_layout.addStretch()
 
         # Add title and repo widget
         layout.addWidget(title_label)
@@ -3412,39 +3409,155 @@ class VersionChecker(QObject):
     """Check for updates using GitHub Releases API."""
     update_found = Signal(str, str)  # (new_version, release_url)
     check_complete = Signal(bool)  # Whether check was successful
-    
+
     def check(self) -> None:
         """Check for updates in a non-blocking way."""
+        logger = logging.getLogger(__name__)
         try:
-            # Create request with headers (GitHub API likes User-Agent)
             headers = {
                 'User-Agent': f'{APP_NAME}/{APP_VERSION}',
                 'Accept': 'application/vnd.github.v3+json'
             }
             req = urllib.request.Request(GITHUB_API_LATEST_RELEASE, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=3) as response:
+
+            # Build an SSL context backed by certifi's CA bundle. macOS Python
+            # installations from python.org don't trust the system roots by
+            # default, which causes CERTIFICATE_VERIFY_FAILED on github.com.
+            import ssl
+            try:
+                import certifi
+                ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            except ImportError:
+                ssl_ctx = ssl.create_default_context()
+
+            # 10s timeout — corporate networks and VPNs can be slow to handshake.
+            with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as response:
                 data = json.loads(response.read().decode())
-                latest_tag = data.get('tag_name', '')  # e.g., "v1.1.0"
-                current_version = APP_VERSION  # e.g., "v1.0.0"
-                
-                # Remove 'v' prefix for comparison
+                latest_tag = data.get('tag_name', '')
+                current_version = APP_VERSION
+
                 latest_version_str = latest_tag.lstrip('v')
                 current_version_str = current_version.lstrip('v')
-                
-                # Compare versions
+
                 latest_ver = version.parse(latest_version_str)
                 current_ver = version.parse(current_version_str)
-                
+
+                logger.info(
+                    f"Update check: latest={latest_version_str!r} current={current_version_str!r}"
+                )
+
                 if latest_ver > current_ver:
                     release_url = data.get('html_url', REPO_URL)
                     self.update_found.emit(latest_version_str, release_url)
-                
+
                 self.check_complete.emit(True)
-                
-        except Exception:
-            # Silently fail - don't interrupt user
+
+        except Exception as e:
+            logger.warning(f"Update check failed: {type(e).__name__}: {e}")
             self.check_complete.emit(False)
+
+
+class Updater(QObject):
+    """Performs in-place upgrades. Strategy is auto-detected per install."""
+
+    status = Signal(str)               # progress text for the log
+    finished = Signal(bool, str, bool) # (success, message, requirements_changed)
+
+    GIT_CLONE = "git"
+    MANUAL = "manual"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.script_dir = Path(__file__).resolve().parent
+        self._target_tag = ""
+        self._release_url = ""
+
+    def detect_install_type(self) -> str:
+        """GIT_CLONE if .git exists alongside the script and git is on PATH, else MANUAL."""
+        if (self.script_dir / ".git").is_dir() and shutil.which("git"):
+            return self.GIT_CLONE
+        return self.MANUAL
+
+    def configure(self, target_tag: str, release_url: str) -> None:
+        self._target_tag = target_tag
+        self._release_url = release_url
+
+    def run(self) -> None:
+        """Entry point for QThread.started — dispatches to the right strategy."""
+        if self.detect_install_type() == self.GIT_CLONE:
+            self._git_upgrade(self._target_tag)
+        else:
+            self._open_release_page(self._release_url)
+
+    def _git(self, *args: str, timeout: int = 30) -> subprocess.CompletedProcess:
+        # -c safe.directory=* bypasses the "dubious ownership" check that fires
+        # when the repo lives on a UNC path / network share / cloud-synced
+        # folder (e.g. Synology Drive on Windows). The user is already running
+        # the script from this directory, so they trust it.
+        return subprocess.run(
+            ["git", "-c", "safe.directory=*", "-C", str(self.script_dir), *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+
+    def _git_upgrade(self, target_tag: str) -> None:
+        try:
+            self.status.emit("Checking working tree...")
+            dirty = self._git("status", "--porcelain", timeout=10)
+            if dirty.returncode != 0:
+                self.finished.emit(False, f"git status failed: {dirty.stderr.strip()}", False)
+                return
+            if dirty.stdout.strip():
+                self.finished.emit(
+                    False,
+                    "Local changes detected in the working tree. "
+                    "Commit or stash them before updating.",
+                    False,
+                )
+                return
+
+            # Capture requirements.txt hash before pull so we can detect changes
+            req_path = self.script_dir / "requirements.txt"
+            req_before = req_path.read_bytes() if req_path.exists() else b""
+
+            self.status.emit("Fetching latest from origin...")
+            fetch = self._git("fetch", "--tags", "--prune", timeout=60)
+            if fetch.returncode != 0:
+                self.finished.emit(False, f"git fetch failed: {fetch.stderr.strip()}", False)
+                return
+
+            self.status.emit(f"Updating to {target_tag} (fast-forward only)...")
+            pull = self._git("pull", "--ff-only", timeout=60)
+            if pull.returncode != 0:
+                self.finished.emit(
+                    False,
+                    "git pull --ff-only failed. Your branch may have diverged from origin.\n\n"
+                    f"{pull.stderr.strip()}",
+                    False,
+                )
+                return
+
+            req_after = req_path.read_bytes() if req_path.exists() else b""
+            requirements_changed = req_before != req_after
+
+            self.finished.emit(
+                True,
+                f"Updated to {target_tag}. {APP_NAME} will restart to apply the new version.",
+                requirements_changed,
+            )
+        except subprocess.TimeoutExpired:
+            self.finished.emit(False, "git operation timed out.", False)
+        except Exception as e:
+            self.finished.emit(False, f"Update failed: {e}", False)
+
+    def _open_release_page(self, release_url: str) -> None:
+        QDesktopServices.openUrl(QUrl(release_url))
+        self.finished.emit(
+            True,
+            "No git clone detected — opened the release page in your browser. "
+            "Download the new version and replace your existing files manually.",
+            False,
+        )
+
 
 class MyWindow(QWidget):
     """Main application window for the Network Device Documentation Utility."""
@@ -3460,6 +3573,7 @@ class MyWindow(QWidget):
         self.update_available = False
         self.new_version = ""
         self.release_url = ""
+        self.upgrade_thread = None
         self.toggle_theme(self.dark_mode)  # Toggle theme according to DARK_MODE_STATE
         self.init_ui()
         self._apply_remembered_settings()
@@ -3636,11 +3750,13 @@ class MyWindow(QWidget):
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         title_layout.addWidget(self.title_label)
 
-        # Add update indicator (initially empty)
+        # Add update indicator (initially empty). Clicking triggers start_upgrade.
+        # Cursor stays default until on_update_found populates the label.
         self.update_indicator = QLabel("", self)
         self.update_indicator.setStyleSheet("color: #4CAF50; font-size: 11px;")
-        self.update_indicator.setOpenExternalLinks(True)
-        self.update_indicator.setCursor(Qt.PointingHandCursor)
+        self.update_indicator.mousePressEvent = lambda e: (
+            self.start_upgrade() if self.update_available else None
+        )
         title_layout.addWidget(self.update_indicator)
 
         # Now add the container to the logo_title_layout
@@ -3982,12 +4098,15 @@ class MyWindow(QWidget):
         output_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins for the Output layout
 
     def check_for_updates(self) -> None:
-        """Start background update check."""
+        """Start background update check. Refuses if a check is already running."""
+        existing = getattr(self, "check_thread", None)
+        if existing is not None and existing.isRunning():
+            return  # already checking — ignore the duplicate request
+
         self.version_checker = VersionChecker()
         self.version_checker.update_found.connect(self.on_update_found)
         self.version_checker.check_complete.connect(self.on_check_complete)
-        
-        # Run in a thread to avoid blocking UI
+
         self.check_thread = QThread()
         self.version_checker.moveToThread(self.check_thread)
         self.check_thread.started.connect(self.version_checker.check)
@@ -3999,10 +4118,12 @@ class MyWindow(QWidget):
         self.new_version = new_version
         self.release_url = release_url
         
-        # Show update indicator
-        update_text = f'<a href="{release_url}" style="color: #4CAF50; text-decoration: none;">'
-        update_text += f'Update available: v{new_version} ↗</a>'
-        self.update_indicator.setText(update_text)
+        # Show update indicator (clickable — handled by mousePressEvent)
+        self.update_indicator.setText(
+            f"<span style='color:#4CAF50; text-decoration:underline;'>"
+            f"Update available: v{new_version} — Click to update</span>"
+        )
+        self.update_indicator.setCursor(Qt.PointingHandCursor)
         
         # Also log to output
         # self.append_colored_message(f"Update available: v{new_version} (current: v{APP_VERSION.lstrip('v')})", "INFO")
@@ -4012,10 +4133,90 @@ class MyWindow(QWidget):
         if hasattr(self, 'check_thread'):
             self.check_thread.quit()
             self.check_thread.wait()
-            
+
         if not success and not self.update_available:
-            # Check failed but that's OK - we don't show errors
+            # Check failed silently — don't interrupt the user.
             pass
+
+    def start_upgrade(self) -> None:
+        """Confirm with the user, then run the Updater on a background thread."""
+        if not self.update_available:
+            return
+        if getattr(self, "upgrade_thread", None) is not None:
+            return  # already running
+
+        install_type = Updater().detect_install_type()
+        target_tag = f"v{self.new_version}"
+
+        if install_type == Updater.GIT_CLONE:
+            msg = (
+                f"Update {APP_NAME} from {APP_VERSION} to {target_tag}?\n\n"
+                f"This will run 'git fetch' and 'git pull --ff-only' in:\n"
+                f"  {Path(__file__).resolve().parent}\n\n"
+                f"{APP_NAME} will restart automatically when the update completes."
+            )
+        else:
+            msg = (
+                f"No git clone detected.\n\n"
+                f"Open the release page for {target_tag} in your browser to "
+                f"download the new version manually?"
+            )
+
+        reply = QMessageBox.question(
+            self, "Update Available", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.updater = Updater()
+        self.updater.configure(target_tag, self.release_url)
+        self.upgrade_thread = QThread()
+        self.updater.moveToThread(self.upgrade_thread)
+        self.updater.status.connect(lambda s: self.append_colored_message(s, "INFO"))
+        self.updater.finished.connect(self._on_upgrade_finished)
+        self.upgrade_thread.started.connect(self.updater.run)
+        self.upgrade_thread.start()
+
+    def _on_upgrade_finished(self, success: bool, message: str,
+                             requirements_changed: bool) -> None:
+        """Handle upgrade completion — show result, optionally restart."""
+        if hasattr(self, "upgrade_thread") and self.upgrade_thread is not None:
+            self.upgrade_thread.quit()
+            self.upgrade_thread.wait()
+            self.upgrade_thread = None
+
+        # Manual / failure paths: just show the message and stop here.
+        if not success or Updater().detect_install_type() != Updater.GIT_CLONE:
+            QMessageBox.information(self, "Update", message)
+            return
+
+        # Successful git upgrade — show result, then restart.
+        body = message
+        if requirements_changed:
+            body += (
+                "\n\nrequirements.txt changed in this release. "
+                "After the restart, run:\n\n"
+                "    pip install -r requirements.txt"
+            )
+        body += "\n\nClick OK to restart now."
+        QMessageBox.information(self, "Update Complete", body)
+        self._restart_application()
+
+    def _restart_application(self) -> None:
+        """Relaunch the script with the same interpreter and arguments."""
+        try:
+            python = sys.executable
+            args = [python, *sys.argv]
+            QApplication.quit()
+            os.execv(python, args)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Restart Failed",
+                f"Could not restart automatically: {e}\n\n"
+                f"Please close and reopen {APP_NAME} manually."
+            )
 
     def keep_horizontal_scroll_left(self) -> None:
         """Ensure the horizontal scrollbar stays on the left side when new text is added."""

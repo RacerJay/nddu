@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## ![Version](https://img.shields.io/badge/Version-v1.3.5-gold) 04-26-2026
+## ![Version](https://img.shields.io/badge/Version-v1.3.6-gold) 04-26-2026
+
+- `Added:` **In-app upgrade**: Clicking the "Update available" indicator in the title bar now performs the upgrade in place. On a git clone the script runs `git fetch` + `git pull --ff-only`, detects whether `requirements.txt` changed, and restarts automatically; on a non-git install it opens the release page in the browser. A confirmation dialog is shown before any action, and the upgrade refuses to run if the working tree has local changes.
+- `Added:` **Update check diagnostics**: Successful checks now log the compared versions (`Update check: latest=... current=...`); failures log the exception type and message at WARNING level instead of failing silently.
+- `Fixed:` **macOS SSL certificate verify failure**: The update check now uses `certifi`'s CA bundle for the GitHub API request. macOS Python installations from python.org do not trust the system root certificates by default, which caused `CERTIFICATE_VERIFY_FAILED` and prevented update notifications. Added `certifi>=2024.2.2` to `requirements.txt`.
+- `Fixed:` **Windows "dubious ownership" git error**: All Updater git invocations now pass `-c safe.directory=*` so the upgrade works on UNC paths, network shares, and cloud-synced folders (e.g. Synology Drive) where Windows reports no ownership. The setting is scoped to the Updater's commands only — no global git config is modified.
+- `Changed:` **Update check timeout** raised from 3s to 10s to accommodate corporate networks and VPNs with slower TLS handshakes.
+- `Fixed:` **Title-bar update indicator cursor**: The pointer cursor is now applied only when an update message is shown, not on the empty placeholder label.
+- `Changed:` **Update check serialization**: A second `check_for_updates()` call while a check is already running is now ignored, preventing thread/object reuse races.
+
+## ![Version](https://img.shields.io/badge/Version-v1.3.5-blue) 04-26-2026
 
 - `Fixed:` **Path traversal hardening**: `sanitize_folder_name()` now rejects `.` and `..` in addition to the existing invalid-character blacklist, returning `"Default"` instead. Prevents a client name like `..` from resolving to a path outside the output folder.
 - `Fixed:` **Hostname filename sanitization**: Device output filenames now run the hostname returned from `show running-config | include hostname` through `sanitize_folder_name()` before joining with the output folder. Prevents a compromised or misconfigured network device from writing output outside its run folder by returning a hostname containing path separators or traversal sequences.
