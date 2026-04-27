@@ -33,6 +33,7 @@
 - **Device Diff:** Compare two prior runs for the same client and generate a color-coded Excel diff report highlighting added, removed, and changed entries across 10 sheets. Supports optional port map CSV for switch replacement scenarios.
 - **Client Manager:** Manage client output folders, view run history, open output files, and manage the device type cache.
 - **Device Type Cache:** Auto-detected device types are cached per client so subsequent runs skip the slow auto-detection step.
+- **In-App Updates:** Checks GitHub for new releases at launch and offers a one-click upgrade. On a git clone the script runs `git pull` and restarts itself; on other installs it opens the release page in your browser.
 - **Verbose Logging:** Includes a verbose mode for detailed debugging and logging.
 - **Cross-Platform:** Works on Windows, macOS, and Linux.
 
@@ -51,6 +52,7 @@
   - `keyring` (for secure credential storage)
   - `pyperclip` (for clipboard functions)
   - `packaging` (for version checking)
+  - `certifi` (for trusted TLS root certificates on the GitHub update check)
 
 ### Steps
 
@@ -114,6 +116,17 @@ Access via the **Manage Clients** button in the Actions row. Features include:
 - **Compare Runs:** Select two prior runs for the same client to generate a Device Diff report. Optionally provide a port map CSV file (see `input/sample_port_map.csv`) to map old interface names to new ones when a switch has been replaced.
 - **Device Type Cache:** View and manage cached device type entries per client.
 
+### Updates
+
+About a second after launch, **nddu** queries the GitHub Releases API for the latest published release and compares it against the running version. If a newer release is available, a green "Update available: vX.Y.Z — Click to update" indicator appears in the title bar.
+
+Clicking the indicator runs the appropriate upgrade strategy for your install:
+
+- **git clone** (the recommended install): a confirmation dialog is shown, then the script runs `git fetch --tags --prune` followed by `git pull --ff-only`. On success, **nddu** restarts itself automatically. If `requirements.txt` changed in the new release, the success dialog tells you to run `pip install -r requirements.txt` after the restart.
+- **Manual install** (no `.git` directory): the GitHub release page is opened in your browser so you can download the new version manually.
+
+Failed checks are silent (no popup) — the indicator simply does not appear. Diagnostics are written to the log file: a successful check logs `Update check: latest=... current=...` at INFO level; a failed check logs the exception type and message at WARNING level.
+
 ---
 
 ## File Structure
@@ -163,6 +176,12 @@ nddu/
   - Privilege Level 15 (Enable Mode) is the minimum requirement for this script to function properly, as it is designed to execute commands that typically require full administrative access.
   - Multi-Factor Authentication (MFA) may limit the ability for the script to function.
     - It would be best to setup an automation service account for this script's execution that does not require MFA.
+- Updates
+  - The in-app upgrade requires a `.git` directory next to `nddu.py` and `git` on the system `PATH`. Installs that lack either fall back to opening the release page in the browser.
+  - The upgrade refuses to run if the working tree has uncommitted changes. Commit, stash, or revert your local edits before clicking Update.
+  - The upgrade uses `git pull --ff-only`. If your clone has diverged from `origin` (e.g. local commits, a different tracking branch), the upgrade will report the git error and stop without modifying anything.
+  - The update check requires outbound HTTPS to `api.github.com`. Behind a corporate proxy or with SSL inspection enabled, the check may fail silently — no notification will appear even when a new release exists.
+  - On macOS, Python installations from python.org do not trust the system root certificates by default. **nddu** uses `certifi`'s CA bundle for the GitHub API call to work around this. If you are running a custom Python build without `certifi`, you may need to run `/Applications/Python\ 3.x/Install\ Certificates.command` once to install the bundle into Python's trust store.
 
 ---
 
@@ -193,6 +212,7 @@ Contributions are welcome! For questions or issues, please open an issue or subm
 - [**Keyring**](https://pypi.org/project/keyring/): For secure credential storage.
 - [**Pyperclip**](https://pypi.org/project/pyperclip/): For clipboard functions.
 - [**Packaging**](https://pypi.org/project/packaging/): For version comparison.
+- [**Certifi**](https://pypi.org/project/certifi/): For trusted TLS root certificates on the GitHub update check.
 
 <!-- ![Kent_Brockman](images/Our_New_AI_Overlords.jpg) -->
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="images/Our_New_AI_Overlords.jpg" alt="Kent_Brockman" width="400" />
