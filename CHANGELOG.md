@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## ![Version](https://img.shields.io/badge/Version-v1.3.6-gold) 04-26-2026
+## ![Version](https://img.shields.io/badge/Version-v1.3.7-gold) 04-27-2026
+
+- `Fixed:` **First-launch output folder**: `output/` is now created on application startup if it does not exist. Previously, clicking **Open Output Folder** before the first run produced an "Output folder does not exist yet" error. Per-client folders are still created lazily on the first **Go**, so typing and abandoning a client name leaves no orphan folders.
+
+## ![Version](https://img.shields.io/badge/Version-v1.3.6-blue) 04-26-2026
 
 - `Added:` **In-app upgrade**: Clicking the "Update available" indicator in the title bar now performs the upgrade in place. On a git clone the script runs `git fetch` + `git pull --ff-only`, detects whether `requirements.txt` changed, and restarts automatically; on a non-git install it opens the release page in the browser. A confirmation dialog is shown before any action, and the upgrade refuses to run if the working tree has local changes.
 - `Added:` **Update check diagnostics**: Successful checks now log the compared versions (`Update check: latest=... current=...`); failures log the exception type and message at WARNING level instead of failing silently.

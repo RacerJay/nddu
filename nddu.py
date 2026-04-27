@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
           Script :: nddu.py
-         Version :: v1.3.6 (04-26-2026)
+         Version :: v1.3.7 (04-27-2026)
           Author :: jason.thomaschefsky@cdw.com
          Purpose :: Document network devices using "show" commands, processed with concurrent threads.
      Information :: See 'README.md' and 'CHANGELOG.md'
@@ -72,8 +72,8 @@ logging.getLogger("netmiko").setLevel(logging.WARNING)   # Suppresses Netmiko ou
 
 # --- Application Metadata ---
 APP_NAME = "Network Device Documentation Utility"
-APP_VERSION = "v1.3.6"
-VERSION_DATE = "(04-26-2026)"
+APP_VERSION = "v1.3.7"
+VERSION_DATE = "(04-27-2026)"
 GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/RacerJay/nddu/releases/latest"
 REPO_URL = "https://github.com/RacerJay/nddu"
 
@@ -3565,6 +3565,11 @@ class MyWindow(QWidget):
     def __init__(self) -> None:
         """Initialize the main window with default settings."""
         super().__init__()
+        # Ensure the base output folder exists on first launch so that
+        # "Open Output Folder" and the client dropdown have something to point
+        # at before the first run.
+        DEFAULT_OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
         self.dark_mode = DARK_MODE_STATE  # Set the dark mode state
         self.enable_was_enabled = False
         self.verbose_was_enabled = False

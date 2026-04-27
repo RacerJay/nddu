@@ -4,7 +4,7 @@
 
 <!-- ![GitHub Tag](https://img.shields.io/github/v/tag/RacerJay/nddu?color=green) -->
 <!-- ![GitHub Release](https://img.shields.io/github/v/release/RacerJay/nddu?color=green) -->
-![Version](https://img.shields.io/badge/Version-v1.3.6-gold)
+![Version](https://img.shields.io/badge/Version-v1.3.7-gold)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 
 ![Version](https://img.shields.io/badge/Python-3.8+-blue.svg)
