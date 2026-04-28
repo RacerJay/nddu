@@ -18,6 +18,11 @@ pyvenv.cfg
 Thumbs.db
 nddu.ini
 *.7z
+*.sav
+
+# Ignore IDE folders
+.idea/
+.vscode/
 
 # Includes
 !.gitignore

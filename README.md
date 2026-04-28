@@ -21,7 +21,7 @@
 
 | Main Application | Settings | Keyring Tools |
 | :---: | :---: | :---: |
-| <img src="images/nddu_1.3.6_screenshot.png" alt="nddu_screenshot" width="350" /> | <img src="images/nddu_1.3.6_settings_screenshot.png" alt="nddu_settings_screenshot" width="350" /> | <img src="images/keyring_tools_2.0_screenshot.png" alt="keyring_tools_screenshot" width="300" /> |
+| <img src="images/nddu_1.3.7_screenshot.png" alt="nddu_screenshot" width="350" /> | <img src="images/nddu_1.3.x_settings_screenshot.png" alt="nddu_settings_screenshot" width="350" /> | <img src="images/keyring_tools_2.0_screenshot.png" alt="keyring_tools_screenshot" width="300" /> |
 
 ---
 
